@@ -1,0 +1,541 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Elegant Lava Lamp Simulation</title>
+    <style>
+        :root {
+            --bg-color: #1a1a1a;
+            --text-color-dim: #666;
+            --panel-bg: rgba(40, 40, 40, 0.95);
+            --panel-border: rgba(255, 255, 255, 0.1);
+            --text-color-bright: #eee;
+            --accent-color: #ff005a;
+        }
+
+        body {
+            margin: 0;
+            padding: 0;
+            display: flex;
+            justify-content: center;
+            align-items: center;
+            height: 100vh;
+            background: linear-gradient(to top, #111, #2d2d2d);
+            overflow: hidden;
+            font-family: 'Inter', sans-serif;
+        }
+        .container {
+            position: relative;
+            display: flex;
+            justify-content: center;
+            align-items: center;
+        }
+        #lamp-canvas {
+            display: block;
+            background-color: transparent;
+        }
+        #info {
+            position: absolute;
+            top: 20px;
+            left: 20px;
+            color: var(--text-color-dim);
+            font-size: 13px;
+            text-align: left;
+            max-width: 220px;
+            line-height: 1.5;
+            text-shadow: 1px 1px 2px #000;
+        }
+        #settings-toggle {
+            position: absolute;
+            top: 20px;
+            right: 20px;
+            width: 40px;
+            height: 40px;
+            cursor: pointer;
+            z-index: 100;
+        }
+        #settings-toggle svg {
+            width: 100%;
+            height: 100%;
+            fill: var(--text-color-dim);
+            transition: transform 0.4s ease-in-out, fill 0.2s ease;
+        }
+        #settings-toggle:hover svg {
+            fill: var(--text-color-bright);
+        }
+        #settings-toggle.open svg {
+             transform: rotate(90deg);
+        }
+        #settings-panel {
+            position: absolute;
+            top: 70px;
+            right: 20px;
+            background: var(--panel-bg);
+            border: 1px solid var(--panel-border);
+            border-radius: 12px;
+            padding: 20px;
+            color: var(--text-color-bright);
+            box-shadow: 0 10px 30px rgba(0,0,0,0.3);
+            backdrop-filter: blur(10px);
+            -webkit-backdrop-filter: blur(10px);
+            z-index: 99;
+            transform: translateX(120%);
+            opacity: 0;
+            transition: transform 0.4s cubic-bezier(0.16, 1, 0.3, 1), opacity 0.4s ease;
+            visibility: hidden;
+        }
+        #settings-panel.open {
+            transform: translateX(0);
+            opacity: 1;
+            visibility: visible;
+        }
+        .setting {
+            margin-bottom: 20px;
+        }
+        .setting:last-child {
+            margin-bottom: 0;
+        }
+        .setting label {
+            display: block;
+            margin-bottom: 10px;
+            font-weight: 500;
+            font-size: 14px;
+        }
+        .color-swatches {
+            display: flex;
+            gap: 10px;
+        }
+        .swatch {
+            width: 30px;
+            height: 30px;
+            border-radius: 50%;
+            cursor: pointer;
+            border: 3px solid transparent;
+            transition: transform 0.2s ease, border-color 0.2s ease;
+            position: relative;
+        }
+        .swatch:hover {
+            transform: scale(1.1);
+        }
+        .swatch.active {
+            border-color: var(--text-color-bright);
+        }
+        .swatch .liquid {
+            width: 100%;
+            height: 100%;
+            border-radius: 50%;
+            overflow: hidden;
+            position: relative;
+        }
+        .swatch .lava {
+            width: 70%;
+            height: 70%;
+            border-radius: 50%;
+            position: absolute;
+            top: 15%;
+            left: 15%;
+        }
+        input[type="range"] {
+            -webkit-appearance: none;
+            appearance: none;
+            width: 100%;
+            height: 8px;
+            background: rgba(0,0,0,0.3);
+            border-radius: 5px;
+            outline: none;
+        }
+        input[type="range"]::-webkit-slider-thumb {
+            -webkit-appearance: none;
+            appearance: none;
+            width: 20px;
+            height: 20px;
+            background: var(--accent-color);
+            cursor: pointer;
+            border-radius: 50%;
+            border: 2px solid var(--text-color-bright);
+            transition: transform 0.1s ease;
+        }
+         input[type="range"]:active::-webkit-slider-thumb {
+            transform: scale(1.2);
+        }
+        input[type="range"]::-moz-range-thumb {
+            width: 20px;
+            height: 20px;
+            background: var(--accent-color);
+            cursor: pointer;
+            border-radius: 50%;
+            border: 2px solid var(--text-color-bright);
+        }
+    </style>
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;700&display=swap" rel="stylesheet">
+</head>
+<body>
+
+    <div class="container">
+        <canvas id="lamp-canvas"></canvas>
+    </div>
+    
+    <div id="info">
+        <b>Thermodynamic Lava Lamp</b><br>
+        A high-fidelity simulation using metaballs and temperature-dependent buoyancy physics for a realistic, fluid effect.
+    </div>
+
+    <div id="settings-toggle">
+        <svg viewBox="0 0 24 24"><path d="M19.4,12c0-0.2,0-0.4,0-0.6c0-0.2,0-0.4,0-0.6l2.1-1.7c0.2-0.1,0.2-0.4,0.1-0.6l-2-3.5C19.4,4.9,19.2,4.8,19,4.9l-2.5,1 c-0.5-0.4-1-0.7-1.6-1l-0.4-2.7C14.6,2.1,14.4,2,14.1,2h-4C9.9,2,9.6,2.1,9.6,2.3L9.2,5.1C8.6,5.3,8.1,5.6,7.5,6l-2.5-1 C4.8,4.8,4.6,4.9,4.4,5.1l-2,3.5C2.3,8.8,2.4,9.1,2.6,9.2l2.1,1.7c0,0.2,0,0.4,0,0.6c0,0.2,0,0.4,0,0.6l-2.1,1.7 c-0.2,0.1-0.2,0.4-0.1,0.6l2,3.5C4.6,19.1,4.8,19.2,5,19.1l2.5-1c0.5,0.4,1,0.7,1.6,1l0.4,2.7c0,0.2,0.2,0.3,0.5,0.3h4 c0.3,0,0.5-0.1,0.5-0.3l0.4-2.7c0.6-0.2,1.2-0.6,1.6-1l2.5,1c0.2,0.1,0.4,0,0.6-0.2l2-3.5c0.1-0.2,0.1-0.5-0.1-0.6L19.4,12z M12,15.5c-1.9,0-3.5-1.6-3.5-3.5s1.6-3.5,3.5-3.5s3.5,1.6,3.5,3.5S13.9,15.5,12,15.5z"></path></svg>
+    </div>
+    <div id="settings-panel">
+        <div class="setting">
+            <label>Color Theme</label>
+            <div id="color-swatches" class="color-swatches"></div>
+        </div>
+        <div class="setting">
+            <label for="speed-slider">Speed</label>
+            <input type="range" id="speed-slider" min="50" max="250" value="100">
+        </div>
+    </div>
+
+
+    <script>
+        const canvas = document.getElementById('lamp-canvas');
+        const ctx = canvas.getContext('2d', { willReadFrequently: true });
+
+        // --- Configuration ---
+        const colorThemes = [
+            { name: 'classic', lava: { r: 255, g: 0, b: 90 }, liquid: '#10052e' },
+            { name: 'forest',  lava: { r: 160, g: 255, b: 120 }, liquid: '#052e10' },
+            { name: 'ocean',   lava: { r: 0, g: 200, b: 255 }, liquid: '#05102e' },
+            { name: 'sunset',  lava: { r: 255, g: 140, b: 0 }, liquid: '#2e0510' },
+            { name: 'nebula',  lava: { r: 200, g: 100, b: 255 }, liquid: '#1a052e' }
+        ];
+
+        let config = {
+            numBlobs: 7,
+            minBlobRadius: 55,
+            maxBlobRadius: 85,
+            baseHeatRate: 0.08,
+            baseCoolRate: 0.1,
+            baseBuoyancyFactor: -0.00015,
+            neutralTemp: 55,
+            viscosity: 0.985,
+            speedMultiplier: 1.0,
+            lavaColor: colorThemes[0].lava,
+            liquidColor: colorThemes[0].liquid,
+            lampWidthRatio: 0.4,
+            baseHeightRatio: 0.15,
+            capHeightRatio: 0.1,
+            neckRatio: 0.55,
+        };
+
+        let blobs = [];
+        let lamp;
+        let bounds;
+        const dpr = window.devicePixelRatio || 1;
+
+        // --- Blob Class (MOVEMENT FIXED) ---
+        class Blob {
+            constructor(x, y, radius) {
+                this.x = x; this.y = y; this.radius = radius;
+                this.vx = (Math.random() - 0.5) * 0.5;
+                this.vy = 0;
+                // Start cool so it stays at the bottom to heat up
+                this.temperature = 0;
+            }
+
+            update() {
+                // Apply speed multiplier to thermal rates
+                const speed = config.speedMultiplier;
+                const heatRate = config.baseHeatRate * speed;
+                const coolRate = config.baseCoolRate * speed;
+                const heatZoneHeight = bounds.h * 0.2;
+
+                if (this.y > bounds.y + bounds.h - heatZoneHeight) {
+                    this.temperature += heatRate;
+                } else {
+                    this.temperature -= coolRate;
+                }
+                this.temperature = Math.max(0, Math.min(100, this.temperature));
+
+                // Apply speed multiplier to buoyancy
+                const buoyancy = (this.temperature - config.neutralTemp) * config.baseBuoyancyFactor * speed;
+                this.vy += buoyancy;
+                
+                // Apply viscosity and update position
+                this.vx *= config.viscosity;
+                this.vy *= config.viscosity;
+                
+                this.x += this.vx;
+                this.y += this.vy;
+
+                // Collision with lamp walls (now perfectly matches visual)
+                const lampRadiusAtY = lamp.getRadiusAt(this.y);
+                const wallLeft = lamp.cx - lampRadiusAtY;
+                const wallRight = lamp.cx + lampRadiusAtY;
+                
+                if (this.x - this.radius < wallLeft) {
+                    this.x = wallLeft + this.radius;
+                    this.vx *= -0.5;
+                }
+                if (this.x + this.radius > wallRight) {
+                    this.x = wallRight - this.radius;
+                    this.vx *= -0.5;
+                }
+                
+                // Collision with top/bottom
+                if (this.y - this.radius < bounds.y) {
+                    this.y = bounds.y + this.radius;
+                    this.vy *= -0.1;
+                }
+                if (this.y + this.radius > bounds.y + bounds.h) {
+                    this.y = bounds.y + bounds.h - this.radius;
+                    this.vy *= -0.1;
+                }
+            }
+        }
+
+        // --- Lamp Geometry Class (DRAWING FIXED) ---
+        class Lamp {
+            constructor(w, h) {
+                this.w = w; this.h = h; this.cx = w / 2;
+                this.baseHeight = h * config.baseHeightRatio;
+                this.capHeight = h * config.capHeightRatio;
+                this.glassHeight = h - this.baseHeight - this.capHeight;
+                this.bodyWidth = w * 0.45;
+                this.neckWidth = this.bodyWidth * config.neckRatio;
+                this.glassPath = null;
+            }
+
+            // The single source of truth for the lamp's shape.
+            getRadiusAt(y) {
+                if (y < this.capHeight || y > this.h - this.baseHeight) {
+                    return 0; // Outside glass area
+                }
+                const t = (y - this.capHeight) / this.glassHeight;
+                const easedT = (1 - Math.cos(t * Math.PI)) / 2;
+                return this.neckWidth + (this.bodyWidth - this.neckWidth) * easedT;
+            }
+
+            // Rebuilt draw function for symmetry and correctness
+            draw() {
+                ctx.clearRect(0, 0, this.w, this.h);
+                
+                const bottomRadius = this.getRadiusAt(this.h - this.baseHeight);
+                const topRadius = this.getRadiusAt(this.capHeight);
+
+                // --- Draw Base ---
+                const baseGrad = ctx.createLinearGradient(0, this.h - this.baseHeight, 0, this.h);
+                baseGrad.addColorStop(0, '#555');
+                baseGrad.addColorStop(0.5, '#222');
+                baseGrad.addColorStop(1, '#333');
+                ctx.fillStyle = baseGrad;
+                ctx.beginPath();
+                ctx.moveTo(this.cx - bottomRadius * 1.15, this.h);
+                ctx.lineTo(this.cx + bottomRadius * 1.15, this.h);
+                ctx.lineTo(this.cx + bottomRadius, this.h - this.baseHeight);
+                ctx.lineTo(this.cx - bottomRadius, this.h - this.baseHeight);
+                ctx.closePath();
+                ctx.fill();
+                
+                // --- Glowing Bulb ---
+                const bulbGradient = ctx.createRadialGradient(this.cx, this.h - this.baseHeight, 5, this.cx, this.h - this.baseHeight, this.bodyWidth);
+                bulbGradient.addColorStop(0, 'rgba(255, 230, 180, 0.7)');
+                bulbGradient.addColorStop(0.8, 'rgba(255, 160, 0, 0.1)');
+                bulbGradient.addColorStop(1, 'rgba(255, 120, 0, 0)');
+                ctx.fillStyle = bulbGradient;
+                ctx.fillRect(0, this.h - this.baseHeight - this.glassHeight * 0.4, this.w, this.glassHeight * 0.4);
+
+                // --- Draw Cap ---
+                const capGrad = ctx.createLinearGradient(0, 0, 0, this.capHeight);
+                capGrad.addColorStop(0, '#222');
+                capGrad.addColorStop(0.5, '#555');
+                capGrad.addColorStop(1, '#333');
+                ctx.fillStyle = capGrad;
+                const capTopWidth = topRadius * 1.1;
+                ctx.beginPath();
+                ctx.moveTo(this.cx - topRadius, this.capHeight);
+                ctx.lineTo(this.cx + topRadius, this.capHeight);
+                ctx.lineTo(this.cx + capTopWidth, 0);
+                ctx.lineTo(this.cx - capTopWidth, 0);
+                ctx.closePath();
+                ctx.fill();
+
+                // --- Generate glass path ---
+                const glassPath = new Path2D();
+                const steps = 60;
+                glassPath.moveTo(this.cx - topRadius, this.capHeight);
+                for (let i = 1; i <= steps; i++) {
+                    const y = this.capHeight + (this.glassHeight / steps) * i;
+                    glassPath.lineTo(this.cx - this.getRadiusAt(y), y);
+                }
+                for (let i = steps; i >= 0; i--) {
+                    const y = this.capHeight + (this.glassHeight / steps) * i;
+                    glassPath.lineTo(this.cx + this.getRadiusAt(y), y);
+                }
+                glassPath.closePath();
+                
+                // --- Draw Liquid ---
+                ctx.save();
+                ctx.clip(glassPath);
+                ctx.fillStyle = config.liquidColor;
+                ctx.fillRect(0, 0, this.w, this.h);
+                ctx.restore();
+
+                this.glassPath = glassPath;
+            }
+        }
+        
+        // --- Metaballs Rendering ---
+        function renderMetaballs() {
+            if (!lamp || !lamp.glassPath) return;
+            
+            ctx.save();
+            ctx.clip(lamp.glassPath); 
+
+            const imageData = ctx.getImageData(0, 0, canvas.width, canvas.height);
+            const data = imageData.data;
+            const res = 2; 
+            const threshold = 1.1;
+
+            for (let x = 0; x < canvas.width; x += res) {
+                for (let y = 0; y < canvas.height; y += res) {
+                    let sum = 0;
+                    for (const blob of blobs) {
+                        const dx = x - blob.x;
+                        const dy = y - blob.y;
+                        const dSq = dx * dx + dy * dy;
+                        if (dSq === 0) continue;
+                        sum += (blob.radius * blob.radius) / dSq;
+                    }
+                    if (sum >= threshold) {
+                         for (let i = 0; i < res; i++) {
+                            for (let j = 0; j < res; j++) {
+                                if (x + i < canvas.width && y + j < canvas.height) {
+                                    const px = ((y + j) * canvas.width + (x + i)) * 4;
+                                    const alpha = Math.min(1, (sum - threshold) * 1.5) * 255;
+                                    data[px] = config.lavaColor.r;
+                                    data[px + 1] = config.lavaColor.g;
+                                    data[px + 2] = config.lavaColor.b;
+                                    data[px + 3] = alpha;
+                                }
+                            }
+                        }
+                    }
+                }
+            }
+            ctx.putImageData(imageData, 0, 0);
+            ctx.restore();
+        }
+
+        // --- Setup and Main Loop ---
+        function setup() {
+            const h = window.innerHeight * 0.95;
+            const w = h * config.lampWidthRatio;
+
+            canvas.width = w * dpr;
+            canvas.height = h * dpr;
+            canvas.style.width = `${w}px`;
+            canvas.style.height = `${h}px`;
+            ctx.scale(dpr, dpr);
+
+            lamp = new Lamp(w, h);
+            
+            bounds = {
+                x: 0, y: lamp.capHeight,
+                w: w, h: lamp.glassHeight
+            };
+            
+            blobs = [];
+            for (let i = 0; i < config.numBlobs; i++) {
+                const radius = (config.minBlobRadius + Math.random() * (config.maxBlobRadius - config.minBlobRadius));
+                // Start blobs at the bottom
+                const x = lamp.cx + (Math.random() - 0.5) * lamp.getRadiusAt(lamp.h - lamp.baseHeight * 1.5);
+                const y = lamp.h - lamp.baseHeight - radius - Math.random() * 40;
+                blobs.push(new Blob(x, y, radius));
+            }
+        }
+        
+        function animate() {
+            blobs.forEach(blob => blob.update());
+            lamp.draw();
+            renderMetaballs();
+            drawHighlights();
+            requestAnimationFrame(animate);
+        }
+        
+        function drawHighlights() {
+            if (!lamp || !lamp.glassPath) return;
+
+            ctx.save();
+            ctx.clip(lamp.glassPath);
+            ctx.strokeStyle = 'rgba(255, 255, 255, 0.2)';
+            ctx.lineWidth = 2;
+            
+            // Left highlight
+            ctx.beginPath();
+            const startY = lamp.capHeight + lamp.glassHeight * 0.1;
+            const endY = lamp.h - lamp.baseHeight - lamp.glassHeight * 0.1;
+            const startX = lamp.cx - lamp.getRadiusAt(startY) + 15;
+            const endX = lamp.cx - lamp.getRadiusAt(endY) + 15;
+            
+            ctx.moveTo(startX, startY);
+            ctx.bezierCurveTo(
+                startX - 40, startY + lamp.glassHeight * 0.3,
+                endX - 40, endY - lamp.glassHeight * 0.3,
+                endX, endY
+            );
+            ctx.stroke();
+            ctx.restore();
+        }
+
+        // --- UI Setup & Event Listeners ---
+        function setupUI() {
+            const swatchContainer = document.getElementById('color-swatches');
+            swatchContainer.innerHTML = '';
+            colorThemes.forEach((theme) => {
+                const swatch = document.createElement('div');
+                swatch.className = 'swatch';
+                if (theme.liquid === config.liquidColor && theme.lava.r === config.lavaColor.r) {
+                  swatch.classList.add('active');
+                }
+                
+                swatch.innerHTML = `<div class="liquid" style="background-color: ${theme.liquid};"><div class="lava" style="background-color: rgb(${theme.lava.r},${theme.lava.g},${theme.lava.b});"></div></div>`;
+
+                swatch.addEventListener('click', () => {
+                    config.lavaColor = theme.lava;
+                    config.liquidColor = theme.liquid;
+                    if (swatchContainer.querySelector('.active')) {
+                        swatchContainer.querySelector('.active').classList.remove('active');
+                    }
+                    swatch.classList.add('active');
+                });
+                swatchContainer.appendChild(swatch);
+            });
+
+            const speedSlider = document.getElementById('speed-slider');
+            speedSlider.value = config.speedMultiplier * 100;
+            speedSlider.addEventListener('input', (e) => {
+                config.speedMultiplier = e.target.value / 100;
+            });
+
+            const settingsToggle = document.getElementById('settings-toggle');
+            const settingsPanel = document.getElementById('settings-panel');
+            settingsToggle.addEventListener('click', () => {
+                settingsToggle.classList.toggle('open');
+                settingsPanel.classList.toggle('open');
+            });
+        }
+
+        // --- Initial Start ---
+        window.addEventListener('resize', () => {
+            setup();
+            setupUI();
+        });
+
+        setupUI();
+        setup();
+        animate();
+    </script>
+</body>
+</html>
