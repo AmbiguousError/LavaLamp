@@ -204,7 +204,7 @@
             <input type="range" id="wax-volume-slider" min="2" max="15" value="7">
         </div>
         <div class="setting">
-            <label for="brightness-slider">Brightness</label>
+            <label for="brightness-slider">Heat (Brightness)</label>
             <input type="range" id="brightness-slider" min="50" max="150" value="100">
         </div>
     </div>
@@ -260,20 +260,35 @@
             }
 
             update() {
+                // Stirred by nearby blobs
                 for (const blob of blobs) {
                     const dx = this.x - blob.x;
                     const dy = this.y - blob.y;
                     const distSq = dx * dx + dy * dy;
-                    if (distSq < blob.radius * blob.radius) {
+                    const influenceRadius = blob.radius * 1.5;
+                    if (distSq < influenceRadius * influenceRadius) {
                         this.vx += blob.vx * 0.05;
                         this.vy += blob.vy * 0.05;
                     }
                 }
+                
+                // --- NEW: General fluid convection current ---
+                const distFromCenter = this.x - lamp.cx;
+                const convectionStrength = 0.005 * (1 - Math.abs(distFromCenter) / (lamp.bodyWidth * 0.5));
+                this.vy -= convectionStrength; // Upward force in the middle
+                
+                // Slight downward pull at edges
+                if (Math.abs(distFromCenter) > lamp.bodyWidth * 0.4) {
+                    this.vy += 0.002;
+                }
+
                 this.x += this.vx;
                 this.y += this.vy;
+
                 if (this.x < 0 || this.x > lamp.w || this.y < 0 || this.y > lamp.h) {
                     this.reset();
                 }
+
                 this.vx *= 0.96;
                 this.vy *= 0.96;
             }
@@ -310,7 +325,6 @@
                 if (this.y > bounds.y + bounds.h - heatZoneHeight) {
                     const distFromCenter = Math.abs(this.x - lamp.cx);
                     const heatFocus = Math.max(0, 1 - distFromCenter / lamp.bodyWidth);
-                    // Brightness now affects heat rate
                     const heatRate = config.baseHeatRate * speed * heatFocus * config.brightness;
                     this.temperature += heatRate;
                 } else {
@@ -331,7 +345,7 @@
                     if (distance < minDistance && distance > 0) {
                         const angle = Math.atan2(dy, dx);
                         const overlap = minDistance - distance;
-                        const repulsionForce = (overlap / minDistance) * 0.2; // Increased force
+                        const repulsionForce = (overlap / minDistance) * 0.2;
                         this.vx -= Math.cos(angle) * repulsionForce;
                         this.vy -= Math.sin(angle) * repulsionForce;
                     }
@@ -342,19 +356,22 @@
                 this.x += this.vx;
                 this.y += this.vy;
 
-                // Stricter wall collision with margin
-                const margin = 2;
-                const lampRadiusAtY = lamp.getRadiusAt(this.y) - margin;
-                const wallLeft = lamp.cx - lampRadiusAtY;
-                const wallRight = lamp.cx + lampRadiusAtY;
+                // --- NEW: Stricter wall collision with larger margin ---
+                const margin = 5; // Increased margin
+                const lampRadiusAtY = lamp.getRadiusAt(this.y);
+                if (lampRadiusAtY > 0) {
+                    const effectiveRadius = lampRadiusAtY - margin;
+                    const wallLeft = lamp.cx - effectiveRadius;
+                    const wallRight = lamp.cx + effectiveRadius;
                 
-                if (this.x - this.radius < wallLeft) {
-                    this.x = wallLeft + this.radius;
-                    this.vx *= -0.8; // Bounce with more force
-                }
-                if (this.x + this.radius > wallRight) {
-                    this.x = wallRight - this.radius;
-                    this.vx *= -0.8;
+                    if (this.x - this.radius < wallLeft) {
+                        this.x = wallLeft + this.radius;
+                        this.vx *= -0.8;
+                    }
+                    if (this.x + this.radius > wallRight) {
+                        this.x = wallRight - this.radius;
+                        this.vx *= -0.8;
+                    }
                 }
                 
                 if (this.y - this.radius < bounds.y) {
@@ -409,15 +426,8 @@
                 ctx.closePath();
                 ctx.fill();
                 
-                // Glowing Bulb affected by brightness
-                const bulbOpacity = 0.7 * config.brightness;
-                const bulbGradient = ctx.createRadialGradient(this.cx, this.h - this.baseHeight, 5, this.cx, this.h - this.baseHeight, this.bodyWidth * config.brightness);
-                bulbGradient.addColorStop(0, `rgba(255, 230, 180, ${bulbOpacity})`);
-                bulbGradient.addColorStop(0.8, `rgba(255, 160, 0, ${bulbOpacity * 0.15})`);
-                bulbGradient.addColorStop(1, 'rgba(255, 120, 0, 0)');
-                ctx.fillStyle = bulbGradient;
-                ctx.fillRect(0, this.h - this.baseHeight - this.glassHeight * 0.4, this.w, this.glassHeight * 0.4);
-
+                // Glowing Bulb effect removed from here
+                
                 // Draw Cap
                 const capGrad = ctx.createLinearGradient(0, 0, 0, this.capHeight);
                 capGrad.addColorStop(0, '#222');
@@ -469,7 +479,7 @@
             const imageData = ctx.getImageData(0, 0, canvas.width, canvas.height);
             const data = imageData.data;
             const res = 2; 
-            const threshold = 1.5; // Increased for more separation
+            const threshold = 1.5;
 
             for (let x = 0; x < canvas.width; x += res) {
                 for (let y = 0; y < canvas.height; y += res) {
