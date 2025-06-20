@@ -330,7 +330,6 @@
                 const speed = config.speedMultiplier;
                 const heatZoneHeight = bounds.h * 0.25;
 
-                // --- ADJUSTED: Allow full travel to bottom ---
                 const distanceFromBottom = (lamp.h - lamp.baseHeight) - (this.y + this.radius);
                 if (distanceFromBottom < heatZoneHeight) {
                     const heatFactor = 1 - (distanceFromBottom / heatZoneHeight);
@@ -347,6 +346,16 @@
 
                 const buoyancy = (this.temperature - config.neutralTemp) * config.baseBuoyancyFactor * speed;
                 this.vy += buoyancy;
+
+                // --- NEW: Fluid convection effect on wax ---
+                const lampRadiusHere = lamp.getRadiusAt(this.y);
+                if (lampRadiusHere > 0) {
+                    const sidePullRatio = Math.abs(this.x - lamp.cx) / lampRadiusHere;
+                    // Apply a downward force that's stronger at the sides, simulating cooler, sinking liquid
+                    const downwardConvection = sidePullRatio * 0.0008 * config.speedMultiplier;
+                    this.vy += downwardConvection;
+                }
+
 
                 for (const otherBlob of blobs) {
                     if (this === otherBlob) continue;
@@ -368,11 +377,10 @@
                 this.x += this.vx;
                 this.y += this.vy;
 
-                // --- ROBUST CONTAINMENT FIX ---
                 const margin = 5;
-                const lampRadiusAtY = lamp.getRadiusAt(this.y);
-                if (lampRadiusAtY > 0) {
-                    const effectiveRadius = lampRadiusAtY - margin;
+                const lampRadiusAtY_2 = lamp.getRadiusAt(this.y);
+                if (lampRadiusAtY_2 > 0) {
+                    const effectiveRadius = lampRadiusAtY_2 - margin;
                     const wallLeft = lamp.cx - effectiveRadius;
                     const wallRight = lamp.cx + effectiveRadius;
                 
@@ -523,7 +531,6 @@
             ctx.restore();
         }
 
-        // --- NEW: Rewritten Initial Blob Placement ---
         function resetBlobs() {
             blobs = [];
             if (!lamp) return;
@@ -545,7 +552,6 @@
         }
 
         function handleWaxDynamics() {
-            // Check if the initial mass needs to break up
             if (blobs.length === 1 && blobs[0].isInitialMass && blobs[0].temperature > 60) {
                 const initialBlob = blobs[0];
                 const totalArea = Math.PI * initialBlob.radius * initialBlob.radius;
