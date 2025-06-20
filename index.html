@@ -330,6 +330,7 @@
                 const speed = config.speedMultiplier;
                 const heatZoneHeight = bounds.h * 0.25;
 
+                // --- ADJUSTED: Allow full travel to bottom ---
                 const distanceFromBottom = (lamp.h - lamp.baseHeight) - (this.y + this.radius);
                 if (distanceFromBottom < heatZoneHeight) {
                     const heatFactor = 1 - (distanceFromBottom / heatZoneHeight);
@@ -375,6 +376,7 @@
                 this.x += this.vx;
                 this.y += this.vy;
 
+                // --- ROBUST CONTAINMENT FIX ---
                 const margin = 5;
                 const lampRadiusAtY_2 = lamp.getRadiusAt(this.y);
                 if (lampRadiusAtY_2 > 0) {
