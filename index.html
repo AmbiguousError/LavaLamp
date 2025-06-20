@@ -195,6 +195,10 @@
             <label for="speed-slider">Speed</label>
             <input type="range" id="speed-slider" min="50" max="250" value="100">
         </div>
+        <div class="setting">
+            <label for="glitter-slider">Glitter Volume</label>
+            <input type="range" id="glitter-slider" min="0" max="500" value="0">
+        </div>
     </div>
 
 
@@ -215,12 +219,13 @@
             numBlobs: 7,
             minBlobRadius: 55,
             maxBlobRadius: 85,
-            baseHeatRate: 0.08,
-            baseCoolRate: 0.1,
-            baseBuoyancyFactor: -0.00015,
+            baseHeatRate: 0.1,
+            baseCoolRate: 0.12,
+            baseBuoyancyFactor: -0.00018,
             neutralTemp: 55,
             viscosity: 0.985,
             speedMultiplier: 1.0,
+            glitterCount: 0,
             lavaColor: colorThemes[0].lava,
             liquidColor: colorThemes[0].liquid,
             lampWidthRatio: 0.4,
@@ -230,9 +235,61 @@
         };
 
         let blobs = [];
+        let glitterParticles = [];
         let lamp;
         let bounds;
         const dpr = window.devicePixelRatio || 1;
+
+        // --- Glitter Particle Class ---
+        class GlitterParticle {
+            constructor(x, y) {
+                this.x = x;
+                this.y = y;
+                this.vx = (Math.random() - 0.5) * 0.5;
+                this.vy = (Math.random() - 0.5) * 0.5 - 0.2; // Tend to sink slowly
+                this.opacity = Math.random() * 0.5 + 0.5;
+            }
+
+            update() {
+                // Stirred by nearby blobs
+                for (const blob of blobs) {
+                    const dx = this.x - blob.x;
+                    const dy = this.y - blob.y;
+                    const distSq = dx * dx + dy * dy;
+                    if (distSq < blob.radius * blob.radius) {
+                        this.vx += blob.vx * 0.05;
+                        this.vy += blob.vy * 0.05;
+                    }
+                }
+
+                this.x += this.vx;
+                this.y += this.vy;
+
+                // Fade out and reset if it goes off-screen
+                if (this.x < 0 || this.x > lamp.w || this.y < 0 || this.y > lamp.h) {
+                    this.reset();
+                }
+
+                // Dampen velocity
+                this.vx *= 0.96;
+                this.vy *= 0.96;
+            }
+
+            reset() {
+                this.x = lamp.cx + (Math.random() - 0.5) * lamp.getRadiusAt(lamp.h / 2) * 2;
+                this.y = Math.random() * lamp.glassHeight + lamp.capHeight;
+                this.vx = (Math.random() - 0.5) * 0.5;
+                this.vy = (Math.random() - 0.5) * 0.5 - 0.2;
+            }
+
+            draw() {
+                ctx.fillStyle = `rgba(255, 255, 255, ${this.opacity})`;
+                ctx.beginPath();
+                ctx.arc(this.x, this.y, 1 * dpr, 0, Math.PI * 2);
+                ctx.fill();
+            }
+        }
+
 
         // --- Blob Class ---
         class Blob {
@@ -244,48 +301,42 @@
             }
 
             update() {
-                // Apply speed multiplier to thermal rates
                 const speed = config.speedMultiplier;
-                const heatRate = config.baseHeatRate * speed;
-                const coolRate = config.baseCoolRate * speed;
-                const heatZoneHeight = bounds.h * 0.2;
+                const heatZoneHeight = bounds.h * 0.25;
 
+                // --- NEW: Centralized heat source ---
                 if (this.y > bounds.y + bounds.h - heatZoneHeight) {
+                    const distFromCenter = Math.abs(this.x - lamp.cx);
+                    const heatFocus = Math.max(0, 1 - distFromCenter / (lamp.bodyWidth));
+                    const heatRate = config.baseHeatRate * speed * heatFocus;
                     this.temperature += heatRate;
                 } else {
+                    const coolRate = config.baseCoolRate * speed;
                     this.temperature -= coolRate;
                 }
                 this.temperature = Math.max(0, Math.min(100, this.temperature));
 
-                // Apply speed multiplier to buoyancy
                 const buoyancy = (this.temperature - config.neutralTemp) * config.baseBuoyancyFactor * speed;
                 this.vy += buoyancy;
 
-                // --- NEW: Inter-blob repulsion for more fluid dynamics ---
+                // Inter-blob repulsion for more fluid dynamics
                 for (const otherBlob of blobs) {
                     if (this === otherBlob) continue;
-
                     const dx = otherBlob.x - this.x;
                     const dy = otherBlob.y - this.y;
                     const distance = Math.sqrt(dx * dx + dy * dy);
                     const minDistance = this.radius + otherBlob.radius;
-
                     if (distance < minDistance && distance > 0) {
                         const angle = Math.atan2(dy, dx);
                         const overlap = minDistance - distance;
-                        
-                        // A small force to push them apart, proportional to the overlap
-                        const repulsionForce = (overlap / minDistance) * 0.1; 
-
+                        const repulsionForce = (overlap / minDistance) * 0.15; // Increased force
                         this.vx -= Math.cos(angle) * repulsionForce;
                         this.vy -= Math.sin(angle) * repulsionForce;
                     }
                 }
                 
-                // Apply viscosity and update position
                 this.vx *= config.viscosity;
                 this.vy *= config.viscosity;
-                
                 this.x += this.vx;
                 this.y += this.vy;
 
@@ -293,7 +344,6 @@
                 const lampRadiusAtY = lamp.getRadiusAt(this.y);
                 const wallLeft = lamp.cx - lampRadiusAtY;
                 const wallRight = lamp.cx + lampRadiusAtY;
-                
                 if (this.x - this.radius < wallLeft) {
                     this.x = wallLeft + this.radius;
                     this.vx *= -0.5;
@@ -393,11 +443,13 @@
                 }
                 glassPath.closePath();
                 
-                // --- Draw Liquid ---
+                // --- Draw Liquid and Glitter ---
                 ctx.save();
                 ctx.clip(glassPath);
                 ctx.fillStyle = config.liquidColor;
                 ctx.fillRect(0, 0, this.w, this.h);
+                // Draw glitter before the wax
+                glitterParticles.forEach(p => p.draw());
                 ctx.restore();
 
                 this.glassPath = glassPath;
@@ -406,7 +458,6 @@
         
         // --- Metaballs Rendering ---
         function renderMetaballs() {
-            // FIX: Added a guard clause to prevent crash if canvas has no size yet.
             if (!lamp || !lamp.glassPath || canvas.width === 0 || canvas.height === 0) return;
             
             ctx.save();
@@ -415,8 +466,7 @@
             const imageData = ctx.getImageData(0, 0, canvas.width, canvas.height);
             const data = imageData.data;
             const res = 2; 
-            // --- NEW: Higher threshold makes blobs more separate ---
-            const threshold = 1.3; 
+            const threshold = 1.4; // Higher threshold for more separation
 
             for (let x = 0; x < canvas.width; x += res) {
                 for (let y = 0; y < canvas.height; y += res) {
@@ -433,7 +483,6 @@
                             for (let j = 0; j < res; j++) {
                                 if (x + i < canvas.width && y + j < canvas.height) {
                                     const px = ((y + j) * canvas.width + (x + i)) * 4;
-                                    // Adjust alpha for the new threshold to keep edges smooth
                                     const alpha = Math.min(1, (sum - threshold) * 1.8) * 255; 
                                     data[px] = config.lavaColor.r;
                                     data[px + 1] = config.lavaColor.g;
@@ -474,10 +523,17 @@
                 const y = lamp.h - lamp.baseHeight - radius - Math.random() * 40;
                 blobs.push(new Blob(x, y, radius));
             }
+
+            // Setup glitter particles
+            glitterParticles = [];
+            for (let i = 0; i < config.glitterCount; i++) {
+                glitterParticles.push(new GlitterParticle(lamp.w, lamp.h));
+            }
         }
         
         function animate() {
             blobs.forEach(blob => blob.update());
+            glitterParticles.forEach(p => p.update());
             lamp.draw();
             renderMetaballs();
             drawHighlights();
@@ -537,6 +593,19 @@
             speedSlider.value = config.speedMultiplier * 100;
             speedSlider.addEventListener('input', (e) => {
                 config.speedMultiplier = e.target.value / 100;
+            });
+
+            const glitterSlider = document.getElementById('glitter-slider');
+            glitterSlider.value = config.glitterCount;
+            glitterSlider.addEventListener('input', (e) => {
+                const newCount = parseInt(e.target.value, 10);
+                config.glitterCount = newCount;
+                while (glitterParticles.length < newCount) {
+                    glitterParticles.push(new GlitterParticle(lamp.w, lamp.h));
+                }
+                if (glitterParticles.length > newCount) {
+                    glitterParticles.length = newCount;
+                }
             });
 
             const settingsToggle = document.getElementById('settings-toggle');
