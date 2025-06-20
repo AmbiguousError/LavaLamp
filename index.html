@@ -358,42 +358,45 @@
             }
         }
         
-        // --- NEW: High-performance Metaballs Rendering ---
+        // --- High-performance Metaballs Rendering ---
         function renderMetaballs() {
             if (!bounds || canvas.width === 0 || canvas.height === 0) return;
             
-            // --- NEW: Seamless Blending ---
-            // Draw the liquid color on the offscreen canvas first
-            offscreenCtx.fillStyle = config.liquidColor;
-            offscreenCtx.fillRect(0, 0, offscreenCanvas.width, offscreenCanvas.height);
-            
-            // Draw the glitter on top of the liquid color
-            glitterParticles.forEach(p => {
-                offscreenCtx.fillStyle = `rgba(255, 255, 255, ${p.opacity})`;
-                offscreenCtx.beginPath();
-                offscreenCtx.arc(p.x, p.y, 1 * dpr, 0, Math.PI * 2);
-                offscreenCtx.fill();
-            });
+            ctx.fillStyle = config.liquidColor;
+            ctx.fillRect(0, 0, bounds.w, bounds.h);
+            glitterParticles.forEach(p => p.draw());
 
-            offscreenCtx.save();
+            offscreenCtx.clearRect(0, 0, offscreenCanvas.width, offscreenCanvas.height);
             
+            offscreenCtx.save();
             offscreenCtx.fillStyle = `rgb(${config.lavaColor.r}, ${config.lavaColor.g}, ${config.lavaColor.b})`;
             
             const blurAmount = 30;
-            offscreenCtx.filter = `blur(${blurAmount}px) contrast(15)`;
+            offscreenCtx.filter = `blur(${blurAmount}px)`;
 
             blobs.forEach(blob => {
                 offscreenCtx.beginPath();
                 offscreenCtx.arc(blob.x, blob.y, blob.radius, 0, Math.PI * 2);
                 offscreenCtx.fill();
             });
+
+            // The 'lighter' composite operation makes overlapping areas brighter, creating the merge effect.
+            offscreenCtx.globalCompositeOperation = 'lighter';
+            blobs.forEach(blob => {
+                offscreenCtx.beginPath();
+                offscreenCtx.arc(blob.x, blob.y, blob.radius, 0, Math.PI * 2);
+                offscreenCtx.fill();
+            });
             offscreenCtx.restore();
-            
-            // Draw the entire offscreen canvas to the main one
+
+            // The contrast filter sharpens the blurred edges to create the final metaball shape.
+            ctx.save();
+            ctx.filter = 'contrast(15)';
             ctx.drawImage(offscreenCanvas, 0, 0);
+            ctx.restore();
         }
 
-        // --- NEW: Rewritten Initial Blob Placement ---
+        // --- Rewritten Initial Blob Placement ---
         function resetBlobs() {
             blobs = [];
             if (!bounds) return;
@@ -446,7 +449,7 @@
                     const dy = blobA.y - blobB.y;
                     const distance = Math.sqrt(dx * dx + dy * dy);
 
-                    if (distance < (blobA.radius + blobB.radius) * 0.7 && blobA.temperature < 50 && blobB.temperature < 50) {
+                    if (distance < (blobA.radius + blobB.radius) * 0.8 && blobA.temperature < 50 && blobB.temperature < 50) {
                         const totalArea = Math.PI * blobA.radius * blobA.radius + Math.PI * blobB.radius * blobB.radius;
                         const newRadius = Math.sqrt(totalArea / Math.PI);
                         const newX = (blobA.x * blobA.radius + blobB.x * blobB.radius) / (blobA.radius + blobB.radius);
@@ -474,12 +477,12 @@
                      const r1 = Math.sqrt(area * ratio / Math.PI);
                      const r2 = Math.sqrt(area * (1-ratio) / Math.PI);
                      const angle = Math.random() * Math.PI * 2;
-                     const blob1 = new Blob(blob.x + Math.cos(angle) * r2, blob.y + Math.sin(angle) * r2, r1);
-                     const blob2 = new Blob(blob.x - Math.cos(angle) * r1, blob.y - Math.sin(angle) * r1, r2);
+                     const blob1 = new Blob(blob.x + Math.cos(angle) * (r2), blob.y + Math.sin(angle) * (r2), r1);
+                     const blob2 = new Blob(blob.x - Math.cos(angle) * (r1), blob.y - Math.sin(angle) * (r1), r2);
                      blob1.temperature = blob2.temperature = blob.temperature;
-                     blob1.vy = blob2.vy = blob.vy;
-                     blob1.vx = blob.vx + (Math.random()-0.5) * 0.5;
-                     blob2.vx = blob.vx + (Math.random()-0.5) * 0.5;
+                     blob1.vy = blob2.vy + (Math.random() - 0.5);
+                     blob1.vx = blob.vx + (Math.random()-0.5) * 2;
+                     blob2.vx = blob.vx + (Math.random()-0.5) * 2;
                      newBlobs.push(blob1, blob2);
                 } else {
                     newBlobs.push(blob);
@@ -504,9 +507,10 @@
             bounds = { x: 0, y: 0, w: w, h: h };
             
             offscreenCanvas = document.createElement('canvas');
-            offscreenCanvas.width = canvas.width;
-            offscreenCanvas.height = canvas.height;
+            offscreenCanvas.width = w * dpr;
+            offscreenCanvas.height = h * dpr;
             offscreenCtx = offscreenCanvas.getContext('2d');
+            offscreenCtx.scale(dpr, dpr);
             
             resetBlobs();
 
@@ -535,7 +539,7 @@
                  handleWaxDynamics();
             }
             glitterParticles.forEach(p => p.update());
-
+            
             renderMetaballs();
             
             animationFrameId = requestAnimationFrame(animate);
