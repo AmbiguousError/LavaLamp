@@ -319,7 +319,6 @@
                 const distanceFromBottom = bounds.h - this.y;
                 if (distanceFromBottom < heatZoneHeight) {
                     const heatFactor = 1 - (distanceFromBottom / heatZoneHeight);
-                    // --- NEW: Centralized Heat Source ---
                     const distFromCenter = Math.abs(this.x - bounds.w / 2);
                     const heatFocus = Math.max(0, 1 - distFromCenter / (bounds.w / 2));
                     const heatRate = config.baseHeatRate * speed * config.brightness * heatFactor * heatFocus;
@@ -377,16 +376,36 @@
             const blurAmount = 30;
             offscreenCtx.filter = `blur(${blurAmount}px)`;
 
+            // --- NEW: Dynamic Shape Rendering ---
             blobs.forEach(blob => {
+                const speed = Math.abs(blob.vy);
+                let radiusX = blob.radius;
+                let radiusY = blob.radius;
+
+                if (blob.vy < 0) { // Rising
+                    radiusY += speed * 10;
+                } else { // Sinking
+                    radiusX += speed * 5;
+                }
+
                 offscreenCtx.beginPath();
-                offscreenCtx.arc(blob.x, blob.y, blob.radius, 0, Math.PI * 2);
+                offscreenCtx.ellipse(blob.x, blob.y, radiusX, radiusY, 0, 0, Math.PI * 2);
                 offscreenCtx.fill();
             });
 
             offscreenCtx.globalCompositeOperation = 'lighter';
             blobs.forEach(blob => {
+                 const speed = Math.abs(blob.vy);
+                let radiusX = blob.radius;
+                let radiusY = blob.radius;
+
+                if (blob.vy < 0) { // Rising
+                    radiusY += speed * 10;
+                } else { // Sinking
+                    radiusX += speed * 5;
+                }
                 offscreenCtx.beginPath();
-                offscreenCtx.arc(blob.x, blob.y, blob.radius, 0, Math.PI * 2);
+                offscreenCtx.ellipse(blob.x, blob.y, radiusX, radiusY, 0, 0, Math.PI * 2);
                 offscreenCtx.fill();
             });
             offscreenCtx.restore();
