@@ -319,7 +319,10 @@
                 const distanceFromBottom = bounds.h - this.y;
                 if (distanceFromBottom < heatZoneHeight) {
                     const heatFactor = 1 - (distanceFromBottom / heatZoneHeight);
-                    const heatRate = config.baseHeatRate * speed * config.brightness * heatFactor;
+                    // --- NEW: Centralized Heat Source ---
+                    const distFromCenter = Math.abs(this.x - bounds.w / 2);
+                    const heatFocus = Math.max(0, 1 - distFromCenter / (bounds.w / 2));
+                    const heatRate = config.baseHeatRate * speed * config.brightness * heatFactor * heatFocus;
                     this.temperature += heatRate;
                 } else {
                     const coolRate = config.baseCoolRate * speed;
@@ -380,7 +383,6 @@
                 offscreenCtx.fill();
             });
 
-            // The 'lighter' composite operation makes overlapping areas brighter, creating the merge effect.
             offscreenCtx.globalCompositeOperation = 'lighter';
             blobs.forEach(blob => {
                 offscreenCtx.beginPath();
@@ -389,7 +391,6 @@
             });
             offscreenCtx.restore();
 
-            // The contrast filter sharpens the blurred edges to create the final metaball shape.
             ctx.save();
             ctx.filter = 'contrast(15)';
             ctx.drawImage(offscreenCanvas, 0, 0);
