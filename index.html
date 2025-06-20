@@ -295,8 +295,8 @@
                     this.reset();
                 }
 
-                this.vx *= 0.96;
-                this.vy *= 0.96;
+                this.vx *= 0.97; // Slightly smoother
+                this.vy *= 0.97;
             }
 
             reset() {
@@ -322,7 +322,7 @@
                 this.vx = (Math.random() - 0.5) * 0.5;
                 this.vy = 0;
                 this.temperature = 0;
-                this.id = Math.random(); // Unique ID for each blob
+                this.id = Math.random();
             }
 
             update() {
@@ -372,11 +372,11 @@
                 
                     if (this.x - this.radius < wallLeft) {
                         this.x = wallLeft + this.radius;
-                        this.vx *= -0.8;
+                        this.vx *= -0.7; // Softer bounce
                     }
                     if (this.x + this.radius > wallRight) {
                         this.x = wallRight - this.radius;
-                        this.vx *= -0.8;
+                        this.vx *= -0.7;
                     }
                 }
                 
@@ -469,6 +469,7 @@
             }
         }
         
+        // --- Metaballs Rendering (Smoothed) ---
         function renderMetaballs() {
             if (!lamp || !lamp.glassPath || canvas.width === 0 || canvas.height === 0) return;
             
@@ -478,7 +479,8 @@
             const imageData = ctx.getImageData(0, 0, canvas.width, canvas.height);
             const data = imageData.data;
             const res = 2; 
-            const threshold = 1.5;
+            const threshold = 1.4;
+            const smoothingRange = 0.8; // Controls how soft the edges are
 
             for (let x = 0; x < canvas.width; x += res) {
                 for (let y = 0; y < canvas.height; y += res) {
@@ -495,7 +497,11 @@
                             for (let j = 0; j < res; j++) {
                                 if (x + i < canvas.width && y + j < canvas.height) {
                                     const px = ((y + j) * canvas.width + (x + i)) * 4;
-                                    const alpha = Math.min(1, (sum - threshold) * 2) * 255; 
+                                    // NEW: Smoothstep function for alpha
+                                    let t = (sum - threshold) / smoothingRange;
+                                    t = Math.max(0, Math.min(1, t)); // Clamp t
+                                    const alpha = (t * t * (3 - 2 * t)) * 255; 
+
                                     data[px] = config.lavaColor.r;
                                     data[px + 1] = config.lavaColor.g;
                                     data[px + 2] = config.lavaColor.b;
@@ -520,7 +526,6 @@
             }
         }
 
-        // --- NEW: Handle wax splitting and merging ---
         function handleWaxDynamics() {
             const newBlobs = [];
             const mergedBlobIds = new Set();
@@ -559,11 +564,13 @@
             for (const blob of blobs) {
                 if (mergedBlobIds.has(blob.id)) continue;
 
-                // Attempt to split blobs
-                const splitChance = (config.volatility / 100) * (blob.temperature / 100) * 0.1;
-                if (blob.radius > 40 && Math.random() < splitChance && blobs.length < 20) {
+                // Split blobs if hot and moving fast (volatile)
+                const speedSq = blob.vx * blob.vx + blob.vy * blob.vy;
+                const splitChance = (config.volatility / 100) * (blob.temperature / 100) * (speedSq / 2) * 0.1;
+
+                if (blob.radius > 40 && blob.temperature > 80 && Math.random() < splitChance && blobs.length < 20) {
                      const area = Math.PI * blob.radius * blob.radius;
-                     const ratio = 0.3 + Math.random() * 0.4; // Split 30/70 to 70/30
+                     const ratio = 0.3 + Math.random() * 0.4;
                      const r1 = Math.sqrt(area * ratio / Math.PI);
                      const r2 = Math.sqrt(area * (1-ratio) / Math.PI);
 
@@ -611,9 +618,20 @@
             }
         }
         
-        function animate() {
+        let lastFrameTime = 0;
+        let frameCount = 0;
+
+        function animate(currentTime) {
+            frameCount++;
+            if(currentTime - lastFrameTime > 1000) { // Update every second
+                lastFrameTime = currentTime;
+                frameCount = 0;
+            }
+
             blobs.forEach(blob => blob.update());
-            handleWaxDynamics();
+            if (frameCount % 2 === 0) { // Run expensive dynamics less often
+                 handleWaxDynamics();
+            }
             glitterParticles.forEach(p => p.update());
             lamp.draw();
             renderMetaballs();
@@ -729,7 +747,7 @@
 
         setupUI();
         setup();
-        animate();
+        animate(0);
     </script>
 </body>
-</html>
+</ht
