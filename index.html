@@ -17,16 +17,21 @@
         body {
             margin: 0;
             padding: 0;
-            background: #000;
+            display: flex;
+            justify-content: center;
+            align-items: center;
+            height: 100vh;
+            background: linear-gradient(to top, #111, #2d2d2d);
             overflow: hidden;
             font-family: 'Inter', sans-serif;
         }
+        .container {
+            position: relative;
+            display: flex;
+            justify-content: center;
+            align-items: center;
+        }
         #lamp-canvas {
-            position: absolute;
-            top: 0;
-            left: 0;
-            width: 100%;
-            height: 100%;
             display: block;
             background-color: transparent;
         }
@@ -169,11 +174,13 @@
 </head>
 <body>
 
-    <canvas id="lamp-canvas"></canvas>
+    <div class="container">
+        <canvas id="lamp-canvas"></canvas>
+    </div>
     
     <div id="info">
-        <b>Thermodynamic Fluid Simulation</b><br>
-        A full-screen simulation using metaballs and temperature-dependent buoyancy physics for a realistic, fluid effect.
+        <b>Thermodynamic Lava Lamp</b><br>
+        A high-fidelity simulation using metaballs and temperature-dependent buoyancy physics for a realistic, fluid effect.
     </div>
 
     <div id="settings-toggle">
@@ -239,10 +246,15 @@
             glitterCount: 0,
             lavaColor: colorThemes[0].lava,
             liquidColor: colorThemes[0].liquid,
+            lampWidthRatio: 0.4,
+            baseHeightRatio: 0.15,
+            capHeightRatio: 0.1,
+            neckRatio: 0.55,
         };
 
         let blobs = [];
         let glitterParticles = [];
+        let lamp;
         let bounds;
         const dpr = window.devicePixelRatio || 1;
 
@@ -268,10 +280,18 @@
                     }
                 }
                 
+                const distFromCenter = this.x - lamp.cx;
+                const convectionStrength = 0.005 * (1 - Math.abs(distFromCenter) / (lamp.bodyWidth * 0.5));
+                this.vy -= convectionStrength;
+                
+                if (Math.abs(distFromCenter) > lamp.bodyWidth * 0.4) {
+                    this.vy += 0.002;
+                }
+
                 this.x += this.vx;
                 this.y += this.vy;
 
-                if (this.x < 0 || this.x > bounds.w || this.y < 0 || this.y > bounds.h) {
+                if (this.x < 0 || this.x > lamp.w || this.y < 0 || this.y > lamp.h) {
                     this.reset();
                 }
 
@@ -280,8 +300,9 @@
             }
 
             reset() {
-                this.x = Math.random() * bounds.w;
-                this.y = Math.random() * bounds.h;
+                if (!lamp) return;
+                this.x = lamp.cx + (Math.random() - 0.5) * lamp.getRadiusAt(lamp.h / 2) * 2;
+                this.y = Math.random() * lamp.glassHeight + lamp.capHeight;
                 this.vx = (Math.random() - 0.5) * 0.5;
                 this.vy = (Math.random() - 0.5) * 0.5 - 0.2;
             }
@@ -309,10 +330,12 @@
                 const speed = config.speedMultiplier;
                 const heatZoneHeight = bounds.h * 0.25;
 
-                const distanceFromBottom = bounds.h - (this.y + this.radius);
+                const distanceFromBottom = (lamp.h - lamp.baseHeight) - (this.y + this.radius);
                 if (distanceFromBottom < heatZoneHeight) {
                     const heatFactor = 1 - (distanceFromBottom / heatZoneHeight);
-                    const heatRate = config.baseHeatRate * speed * config.brightness * heatFactor;
+                    const distFromCenter = Math.abs(this.x - lamp.cx);
+                    const heatFocus = Math.max(0, 1 - distFromCenter / lamp.bodyWidth);
+                    const heatRate = config.baseHeatRate * speed * heatFocus * config.brightness * heatFactor;
                     this.temperature += heatRate;
                 } else {
                     const coolRate = config.baseCoolRate * speed;
@@ -323,6 +346,14 @@
 
                 const buoyancy = (this.temperature - config.neutralTemp) * config.baseBuoyancyFactor * speed;
                 this.vy += buoyancy;
+
+                const lampRadiusHere = lamp.getRadiusAt(this.y);
+                if (lampRadiusHere > 0) {
+                    const sidePullRatio = Math.abs(this.x - lamp.cx) / lampRadiusHere;
+                    const downwardConvection = sidePullRatio * 0.0008 * config.speedMultiplier;
+                    this.vy += downwardConvection;
+                }
+
 
                 for (const otherBlob of blobs) {
                     if (this === otherBlob) continue;
@@ -344,18 +375,121 @@
                 this.x += this.vx;
                 this.y += this.vy;
 
-                // --- ROBUST CONTAINMENT FIX ---
-                if (this.x - this.radius < 0) { this.x = this.radius; this.vx *= -0.7; }
-                if (this.x + this.radius > bounds.w) { this.x = bounds.w - this.radius; this.vx *= -0.7; }
-                if (this.y - this.radius < 0) { this.y = this.radius; this.vy *= -0.7; }
-                if (this.y + this.radius > bounds.h) { this.y = bounds.h - this.radius; this.vy *= -0.7; }
+                const margin = 5;
+                const lampRadiusAtY_2 = lamp.getRadiusAt(this.y);
+                if (lampRadiusAtY_2 > 0) {
+                    const effectiveRadius = lampRadiusAtY_2 - margin;
+                    const wallLeft = lamp.cx - effectiveRadius;
+                    const wallRight = lamp.cx + effectiveRadius;
+                
+                    if (this.x - this.radius < wallLeft) {
+                        this.x = wallLeft + this.radius;
+                        this.vx *= -0.7;
+                    }
+                    if (this.x + this.radius > wallRight) {
+                        this.x = wallRight - this.radius;
+                        this.vx *= -0.7;
+                    }
+                    this.x = Math.max(this.x, wallLeft + this.radius);
+                    this.x = Math.min(this.x, wallRight - this.radius);
+                }
+                
+                if (this.y - this.radius < bounds.y) {
+                    this.y = bounds.y + this.radius;
+                    this.vy *= -0.1;
+                }
+                if (this.y + this.radius >= lamp.h - lamp.baseHeight) {
+                    this.y = lamp.h - lamp.baseHeight - this.radius;
+                    this.vy *= -0.1;
+                }
+            }
+        }
+
+        // --- Lamp Geometry Class ---
+        class Lamp {
+            constructor(w, h) {
+                this.w = w; this.h = h; this.cx = w / 2;
+                this.baseHeight = h * config.baseHeightRatio;
+                this.capHeight = h * config.capHeightRatio;
+                this.glassHeight = h - this.baseHeight - this.capHeight;
+                this.bodyWidth = w * 0.45;
+                this.neckWidth = this.bodyWidth * config.neckRatio;
+                this.glassPath = null;
+            }
+
+            getRadiusAt(y) {
+                if (y < this.capHeight || y > this.h - this.baseHeight) {
+                    return 0;
+                }
+                const t = (y - this.capHeight) / this.glassHeight;
+                const easedT = (1 - Math.cos(t * Math.PI)) / 2;
+                return this.neckWidth + (this.bodyWidth - this.neckWidth) * easedT;
+            }
+
+            draw() {
+                ctx.clearRect(0, 0, this.w, this.h);
+                
+                const bottomRadius = this.getRadiusAt(this.h - this.baseHeight);
+                const topRadius = this.getRadiusAt(this.capHeight);
+
+                const baseGrad = ctx.createLinearGradient(0, this.h - this.baseHeight, 0, this.h);
+                baseGrad.addColorStop(0, '#555');
+                baseGrad.addColorStop(0.5, '#222');
+                baseGrad.addColorStop(1, '#333');
+                ctx.fillStyle = baseGrad;
+                ctx.beginPath();
+                ctx.moveTo(this.cx - bottomRadius * 1.15, this.h);
+                ctx.lineTo(this.cx + bottomRadius * 1.15, this.h);
+                ctx.lineTo(this.cx + bottomRadius, this.h - this.baseHeight);
+                ctx.lineTo(this.cx - bottomRadius, this.h - this.baseHeight);
+                ctx.closePath();
+                ctx.fill();
+                
+                const capGrad = ctx.createLinearGradient(0, 0, 0, this.capHeight);
+                capGrad.addColorStop(0, '#222');
+                capGrad.addColorStop(0.5, '#555');
+                capGrad.addColorStop(1, '#333');
+                ctx.fillStyle = capGrad;
+                const capTopWidth = topRadius * 1.1;
+                ctx.beginPath();
+                ctx.moveTo(this.cx - topRadius, this.capHeight);
+                ctx.lineTo(this.cx + topRadius, this.capHeight);
+                ctx.lineTo(this.cx + capTopWidth, 0);
+                ctx.lineTo(this.cx - capTopWidth, 0);
+                ctx.closePath();
+                ctx.fill();
+
+                const glassPath = new Path2D();
+                const steps = 60;
+                glassPath.moveTo(this.cx - topRadius, this.capHeight);
+                for (let i = 1; i <= steps; i++) {
+                    const y = this.capHeight + (this.glassHeight / steps) * i;
+                    glassPath.lineTo(this.cx - this.getRadiusAt(y), y);
+                }
+                for (let i = steps; i >= 0; i--) {
+                    const y = this.capHeight + (this.glassHeight / steps) * i;
+                    glassPath.lineTo(this.cx + this.getRadiusAt(y), y);
+                }
+                glassPath.closePath();
+                
+                ctx.save();
+                ctx.clip(glassPath);
+                ctx.fillStyle = config.liquidColor;
+                ctx.fillRect(0, 0, this.w, this.h);
+                glitterParticles.forEach(p => p.draw());
+                ctx.restore();
+
+                this.glassPath = glassPath;
             }
         }
         
         // --- Metaballs Rendering ---
         function renderMetaballs() {
-            if (!bounds || canvas.width === 0 || canvas.height === 0) return;
+            if (!lamp || !lamp.glassPath || canvas.width === 0 || canvas.height === 0) return;
             
+            ctx.save();
+            ctx.clip(lamp.glassPath); 
+
             const imageData = ctx.getImageData(0, 0, canvas.width, canvas.height);
             const data = imageData.data;
             const res = 2; 
@@ -398,15 +532,20 @@
         // --- NEW: Rewritten Initial Blob Placement ---
         function resetBlobs() {
             blobs = [];
-            if (!bounds) return;
+            if (!lamp) return;
         
             let totalVolume = config.initialNumBlobs * Math.PI * Math.pow((config.minBlobRadius + config.maxBlobRadius) / 2, 2);
             let singleMassRadius = Math.sqrt(totalVolume / Math.PI);
-            
-            singleMassRadius = Math.min(singleMassRadius, bounds.w / 2 - 10);
         
-            const startX = bounds.w / 2;
-            const startY = bounds.h - singleMassRadius - 5;
+            let startY = lamp.h - lamp.baseHeight - singleMassRadius;
+            
+            const bottomWidth = lamp.getRadiusAt(lamp.h - lamp.baseHeight - 1);
+            if (bottomWidth > 0) {
+              singleMassRadius = Math.min(singleMassRadius, bottomWidth - 5);
+            }
+            
+            startY = lamp.h - lamp.baseHeight - singleMassRadius;
+            const startX = lamp.cx;
         
             const initialBlob = new Blob(startX, startY, singleMassRadius);
             initialBlob.isInitialMass = true;
@@ -491,8 +630,9 @@
 
         // --- Setup and Main Loop ---
         function setup() {
-            const w = window.innerWidth;
-            const h = window.innerHeight;
+            const containerSize = Math.min(window.innerWidth, window.innerHeight);
+            const h = containerSize * 0.95;
+            const w = h * config.lampWidthRatio;
             
             if (w <= 0 || h <= 0) return false;
 
@@ -502,13 +642,18 @@
             canvas.style.height = `${h}px`;
             ctx.scale(dpr, dpr);
 
-            bounds = { x: 0, y: 0, w: w, h: h };
+            lamp = new Lamp(w, h);
+            
+            bounds = {
+                x: 0, y: lamp.capHeight,
+                w: w, h: lamp.glassHeight
+            };
             
             resetBlobs();
 
             glitterParticles = [];
             for (let i = 0; i < config.glitterCount; i++) {
-                glitterParticles.push(new GlitterParticle(w, h));
+                glitterParticles.push(new GlitterParticle(lamp.w, lamp.h));
             }
             return true;
         }
@@ -518,7 +663,7 @@
         let animationFrameId;
 
         function animate(currentTime) {
-            if (!bounds) return;
+            if (!lamp) return;
 
             frameCount++;
             if(currentTime - lastFrameTime > 1000) {
@@ -531,16 +676,36 @@
                  handleWaxDynamics();
             }
             glitterParticles.forEach(p => p.update());
-
-            ctx.fillStyle = config.liquidColor;
-            ctx.fillRect(0, 0, canvas.width, canvas.height);
-            glitterParticles.forEach(p => p.draw());
-
+            lamp.draw();
             renderMetaballs();
-            
+            drawHighlights();
             animationFrameId = requestAnimationFrame(animate);
         }
         
+        function drawHighlights() {
+            if (!lamp || !lamp.glassPath) return;
+
+            ctx.save();
+            ctx.clip(lamp.glassPath);
+            ctx.strokeStyle = 'rgba(255, 255, 255, 0.2)';
+            ctx.lineWidth = 2;
+            
+            const startY = lamp.capHeight + lamp.glassHeight * 0.1;
+            const endY = lamp.h - lamp.baseHeight - lamp.glassHeight * 0.1;
+            const startX = lamp.cx - lamp.getRadiusAt(startY) + 15;
+            const endX = lamp.cx - lamp.getRadiusAt(endY) + 15;
+            
+            ctx.beginPath();
+            ctx.moveTo(startX, startY);
+            ctx.bezierCurveTo(
+                startX - 40, startY + lamp.glassHeight * 0.3,
+                endX - 40, endY - lamp.glassHeight * 0.3,
+                endX, endY
+            );
+            ctx.stroke();
+            ctx.restore();
+        }
+
         function setupUI() {
             const swatchContainer = document.getElementById('color-swatches');
             swatchContainer.innerHTML = '';
@@ -576,7 +741,7 @@
                 const newCount = parseInt(e.target.value, 10);
                 config.glitterCount = newCount;
                 while (glitterParticles.length < newCount) {
-                    glitterParticles.push(new GlitterParticle(bounds.w, bounds.h));
+                    glitterParticles.push(new GlitterParticle(lamp.w, lamp.h));
                 }
                 if (glitterParticles.length > newCount) {
                     glitterParticles.length = newCount;
