@@ -197,7 +197,7 @@
         </div>
         <div class="setting">
             <label for="glitter-slider">Glitter Volume</label>
-            <input type="range" id="glitter-slider" min="0" max="500" value="0">
+            <input type="range" id="glitter-slider" min="0" max="1000" value="0">
         </div>
         <div class="setting">
             <label for="wax-volume-slider">Wax Volume</label>
@@ -206,6 +206,10 @@
         <div class="setting">
             <label for="brightness-slider">Heat (Brightness)</label>
             <input type="range" id="brightness-slider" min="50" max="150" value="100">
+        </div>
+        <div class="setting">
+            <label for="viscosity-slider">Wax Viscosity</label>
+            <input type="range" id="viscosity-slider" min="950" max="995" value="985">
         </div>
     </div>
 
@@ -272,12 +276,10 @@
                     }
                 }
                 
-                // --- NEW: General fluid convection current ---
                 const distFromCenter = this.x - lamp.cx;
                 const convectionStrength = 0.005 * (1 - Math.abs(distFromCenter) / (lamp.bodyWidth * 0.5));
-                this.vy -= convectionStrength; // Upward force in the middle
+                this.vy -= convectionStrength;
                 
-                // Slight downward pull at edges
                 if (Math.abs(distFromCenter) > lamp.bodyWidth * 0.4) {
                     this.vy += 0.002;
                 }
@@ -356,8 +358,7 @@
                 this.x += this.vx;
                 this.y += this.vy;
 
-                // --- NEW: Stricter wall collision with larger margin ---
-                const margin = 5; // Increased margin
+                const margin = 5;
                 const lampRadiusAtY = lamp.getRadiusAt(this.y);
                 if (lampRadiusAtY > 0) {
                     const effectiveRadius = lampRadiusAtY - margin;
@@ -425,8 +426,6 @@
                 ctx.lineTo(this.cx - bottomRadius, this.h - this.baseHeight);
                 ctx.closePath();
                 ctx.fill();
-                
-                // Glowing Bulb effect removed from here
                 
                 // Draw Cap
                 const capGrad = ctx.createLinearGradient(0, 0, 0, this.capHeight);
@@ -634,6 +633,12 @@
             brightnessSlider.value = config.brightness * 100;
             brightnessSlider.addEventListener('input', (e) => {
                 config.brightness = e.target.value / 100;
+            });
+
+            const viscositySlider = document.getElementById('viscosity-slider');
+            viscositySlider.value = config.viscosity * 1000;
+            viscositySlider.addEventListener('input', (e) => {
+                config.viscosity = e.target.value / 1000;
             });
 
             const settingsToggle = document.getElementById('settings-toggle');
