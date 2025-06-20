@@ -330,16 +330,19 @@
                 const speed = config.speedMultiplier;
                 const heatZoneHeight = bounds.h * 0.25;
 
-                // Heat based on proximity to bottom
-                if (this.y > lamp.h - lamp.baseHeight - this.radius - heatZoneHeight) {
+                // --- ADJUSTED: Allow full travel to bottom ---
+                const distanceFromBottom = (lamp.h - lamp.baseHeight) - (this.y + this.radius);
+                if (distanceFromBottom < heatZoneHeight) {
+                    const heatFactor = 1 - (distanceFromBottom / heatZoneHeight);
                     const distFromCenter = Math.abs(this.x - lamp.cx);
                     const heatFocus = Math.max(0, 1 - distFromCenter / lamp.bodyWidth);
-                    const heatRate = config.baseHeatRate * speed * heatFocus * config.brightness;
+                    const heatRate = config.baseHeatRate * speed * heatFocus * config.brightness * heatFactor;
                     this.temperature += heatRate;
                 } else {
                     const coolRate = config.baseCoolRate * speed;
                     this.temperature -= coolRate;
                 }
+
                 this.temperature = Math.max(0, Math.min(100, this.temperature));
 
                 const buoyancy = (this.temperature - config.neutralTemp) * config.baseBuoyancyFactor * speed;
@@ -385,7 +388,6 @@
                     this.x = Math.min(this.x, wallRight - this.radius);
                 }
                 
-                // --- ADJUSTED: Allow full travel to bottom ---
                 if (this.y - this.radius < bounds.y) {
                     this.y = bounds.y + this.radius;
                     this.vy *= -0.1;
@@ -529,18 +531,16 @@
             let totalVolume = config.initialNumBlobs * Math.PI * Math.pow((config.minBlobRadius + config.maxBlobRadius) / 2, 2);
             let singleMassRadius = Math.sqrt(totalVolume / Math.PI);
         
-            // Start as one big blob at the bottom
             let startY = lamp.h - lamp.baseHeight - singleMassRadius;
             
-            // Cap the radius so it cannot be wider than the lamp at its spawn point
-            singleMassRadius = Math.min(singleMassRadius, lamp.getRadiusAt(startY) - 5);
+            const bottomWidth = lamp.getRadiusAt(lamp.h - lamp.baseHeight);
+            singleMassRadius = Math.min(singleMassRadius, bottomWidth - 5);
             
-            // Recalculate Y based on potentially smaller radius
             startY = lamp.h - lamp.baseHeight - singleMassRadius;
             const startX = lamp.cx;
         
             const initialBlob = new Blob(startX, startY, singleMassRadius);
-            initialBlob.isInitialMass = true; // Flag this as the starting blob
+            initialBlob.isInitialMass = true;
             blobs.push(initialBlob);
         }
 
