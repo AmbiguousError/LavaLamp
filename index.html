@@ -392,7 +392,7 @@
                     this.y = bounds.y + this.radius;
                     this.vy *= -0.1;
                 }
-                if (this.y + this.radius > lamp.h - lamp.baseHeight) {
+                if (this.y + this.radius >= lamp.h - lamp.baseHeight) {
                     this.y = lamp.h - lamp.baseHeight - this.radius;
                     this.vy *= -0.1;
                 }
@@ -533,7 +533,7 @@
         
             let startY = lamp.h - lamp.baseHeight - singleMassRadius;
             
-            const bottomWidth = lamp.getRadiusAt(lamp.h - lamp.baseHeight);
+            const bottomWidth = lamp.getRadiusAt(lamp.h - lamp.baseHeight -1);
             singleMassRadius = Math.min(singleMassRadius, bottomWidth - 5);
             
             startY = lamp.h - lamp.baseHeight - singleMassRadius;
