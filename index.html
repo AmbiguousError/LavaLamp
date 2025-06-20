@@ -200,16 +200,20 @@
             <input type="range" id="glitter-slider" min="0" max="1000" value="0">
         </div>
         <div class="setting">
-            <label for="wax-volume-slider">Wax Volume</label>
+            <label for="wax-volume-slider">Initial Wax Volume</label>
             <input type="range" id="wax-volume-slider" min="2" max="15" value="7">
         </div>
         <div class="setting">
-            <label for="brightness-slider">Heat (Brightness)</label>
+            <label for="brightness-slider">Heat</label>
             <input type="range" id="brightness-slider" min="50" max="150" value="100">
         </div>
         <div class="setting">
             <label for="viscosity-slider">Wax Viscosity</label>
             <input type="range" id="viscosity-slider" min="950" max="995" value="985">
+        </div>
+        <div class="setting">
+            <label for="volatility-slider">Volatility</label>
+            <input type="range" id="volatility-slider" min="0" max="100" value="20">
         </div>
     </div>
 
@@ -228,7 +232,7 @@
         ];
 
         let config = {
-            numBlobs: 7,
+            initialNumBlobs: 7,
             minBlobRadius: 55,
             maxBlobRadius: 85,
             baseHeatRate: 0.1,
@@ -236,6 +240,7 @@
             baseBuoyancyFactor: -0.00018,
             neutralTemp: 55,
             viscosity: 0.985,
+            volatility: 0.2,
             speedMultiplier: 1.0,
             brightness: 1.0,
             glitterCount: 0,
@@ -264,7 +269,6 @@
             }
 
             update() {
-                // Stirred by nearby blobs
                 for (const blob of blobs) {
                     const dx = this.x - blob.x;
                     const dy = this.y - blob.y;
@@ -318,6 +322,7 @@
                 this.vx = (Math.random() - 0.5) * 0.5;
                 this.vy = 0;
                 this.temperature = 0;
+                this.id = Math.random(); // Unique ID for each blob
             }
 
             update() {
@@ -413,7 +418,6 @@
                 const bottomRadius = this.getRadiusAt(this.h - this.baseHeight);
                 const topRadius = this.getRadiusAt(this.capHeight);
 
-                // Draw Base
                 const baseGrad = ctx.createLinearGradient(0, this.h - this.baseHeight, 0, this.h);
                 baseGrad.addColorStop(0, '#555');
                 baseGrad.addColorStop(0.5, '#222');
@@ -427,7 +431,6 @@
                 ctx.closePath();
                 ctx.fill();
                 
-                // Draw Cap
                 const capGrad = ctx.createLinearGradient(0, 0, 0, this.capHeight);
                 capGrad.addColorStop(0, '#222');
                 capGrad.addColorStop(0.5, '#555');
@@ -442,7 +445,6 @@
                 ctx.closePath();
                 ctx.fill();
 
-                // Generate glass path
                 const glassPath = new Path2D();
                 const steps = 60;
                 glassPath.moveTo(this.cx - topRadius, this.capHeight);
@@ -456,7 +458,6 @@
                 }
                 glassPath.closePath();
                 
-                // Draw Liquid and Glitter
                 ctx.save();
                 ctx.clip(glassPath);
                 ctx.fillStyle = config.liquidColor;
@@ -468,7 +469,6 @@
             }
         }
         
-        // Metaballs Rendering
         function renderMetaballs() {
             if (!lamp || !lamp.glassPath || canvas.width === 0 || canvas.height === 0) return;
             
@@ -512,12 +512,77 @@
 
         function resetBlobs() {
             blobs = [];
-            for (let i = 0; i < config.numBlobs; i++) {
+            for (let i = 0; i < config.initialNumBlobs; i++) {
                 const radius = (config.minBlobRadius + Math.random() * (config.maxBlobRadius - config.minBlobRadius));
                 const x = lamp.cx + (Math.random() - 0.5) * lamp.getRadiusAt(lamp.h - lamp.baseHeight * 1.5);
                 const y = lamp.h - lamp.baseHeight - radius - Math.random() * 40;
                 blobs.push(new Blob(x, y, radius));
             }
+        }
+
+        // --- NEW: Handle wax splitting and merging ---
+        function handleWaxDynamics() {
+            const newBlobs = [];
+            const mergedBlobIds = new Set();
+
+            // Attempt to merge blobs
+            for (let i = 0; i < blobs.length; i++) {
+                for (let j = i + 1; j < blobs.length; j++) {
+                    const blobA = blobs[i];
+                    const blobB = blobs[j];
+
+                    if (mergedBlobIds.has(blobA.id) || mergedBlobIds.has(blobB.id)) continue;
+                    
+                    const dx = blobA.x - blobB.x;
+                    const dy = blobA.y - blobB.y;
+                    const distance = Math.sqrt(dx * dx + dy * dy);
+
+                    if (distance < (blobA.radius + blobB.radius) * 0.5 && blobA.temperature < 40 && blobB.temperature < 40) {
+                        const totalArea = Math.PI * blobA.radius * blobA.radius + Math.PI * blobB.radius * blobB.radius;
+                        const newRadius = Math.sqrt(totalArea / Math.PI);
+                        const newX = (blobA.x * blobA.radius + blobB.x * blobB.radius) / (blobA.radius + blobB.radius);
+                        const newY = (blobA.y * blobA.radius + blobB.y * blobB.radius) / (blobA.radius + blobB.radius);
+                        
+                        const newBlob = new Blob(newX, newY, newRadius);
+                        newBlob.vx = (blobA.vx * blobA.radius + blobB.vx * blobB.radius) / (blobA.radius + blobB.radius);
+                        newBlob.vy = (blobA.vy * blobA.radius + blobB.vy * blobB.radius) / (blobA.radius + blobB.radius);
+                        newBlob.temperature = (blobA.temperature + blobB.temperature) / 2;
+
+                        newBlobs.push(newBlob);
+                        mergedBlobIds.add(blobA.id);
+                        mergedBlobIds.add(blobB.id);
+                    }
+                }
+            }
+
+            // Add unmerged blobs and handle splitting
+            for (const blob of blobs) {
+                if (mergedBlobIds.has(blob.id)) continue;
+
+                // Attempt to split blobs
+                const splitChance = (config.volatility / 100) * (blob.temperature / 100) * 0.1;
+                if (blob.radius > 40 && Math.random() < splitChance && blobs.length < 20) {
+                     const area = Math.PI * blob.radius * blob.radius;
+                     const ratio = 0.3 + Math.random() * 0.4; // Split 30/70 to 70/30
+                     const r1 = Math.sqrt(area * ratio / Math.PI);
+                     const r2 = Math.sqrt(area * (1-ratio) / Math.PI);
+
+                     const angle = Math.random() * Math.PI * 2;
+                     const blob1 = new Blob(blob.x + Math.cos(angle) * r2, blob.y + Math.sin(angle) * r2, r1);
+                     const blob2 = new Blob(blob.x - Math.cos(angle) * r1, blob.y - Math.sin(angle) * r1, r2);
+                     
+                     blob1.temperature = blob2.temperature = blob.temperature;
+                     blob1.vy = blob2.vy = blob.vy;
+                     blob1.vx = blob.vx + (Math.random()-0.5) * 0.5;
+                     blob2.vx = blob.vx + (Math.random()-0.5) * 0.5;
+
+                     newBlobs.push(blob1, blob2);
+                } else {
+                    newBlobs.push(blob);
+                }
+            }
+            
+            blobs = newBlobs;
         }
 
         // --- Setup and Main Loop ---
@@ -548,6 +613,7 @@
         
         function animate() {
             blobs.forEach(blob => blob.update());
+            handleWaxDynamics();
             glitterParticles.forEach(p => p.update());
             lamp.draw();
             renderMetaballs();
@@ -623,9 +689,9 @@
             });
 
             const waxSlider = document.getElementById('wax-volume-slider');
-            waxSlider.value = config.numBlobs;
+            waxSlider.value = config.initialNumBlobs;
             waxSlider.addEventListener('input', (e) => {
-                config.numBlobs = parseInt(e.target.value, 10);
+                config.initialNumBlobs = parseInt(e.target.value, 10);
                 resetBlobs();
             });
 
@@ -639,6 +705,12 @@
             viscositySlider.value = config.viscosity * 1000;
             viscositySlider.addEventListener('input', (e) => {
                 config.viscosity = e.target.value / 1000;
+            });
+
+            const volatilitySlider = document.getElementById('volatility-slider');
+            volatilitySlider.value = config.volatility * 100;
+            volatilitySlider.addEventListener('input', (e) => {
+                config.volatility = e.target.value / 100;
             });
 
             const settingsToggle = document.getElementById('settings-toggle');
