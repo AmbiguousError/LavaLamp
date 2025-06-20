@@ -248,11 +248,8 @@
 
         // --- Glitter Particle Class ---
         class GlitterParticle {
-            constructor(x, y) {
-                this.x = x;
-                this.y = y;
-                this.vx = (Math.random() - 0.5) * 0.5;
-                this.vy = (Math.random() - 0.5) * 0.5 - 0.2;
+            constructor() {
+                this.reset();
                 this.opacity = Math.random() * 0.5 + 0.5;
             }
 
@@ -268,6 +265,15 @@
                     }
                 }
                 
+                // --- CORRECTED: Convection for full screen ---
+                const distFromCenter = this.x - bounds.w / 2;
+                const convectionStrength = 0.005 * (1 - Math.abs(distFromCenter) / (bounds.w / 2));
+                this.vy -= convectionStrength;
+                
+                if (Math.abs(distFromCenter) > bounds.w * 0.4) {
+                    this.vy += 0.002;
+                }
+
                 this.x += this.vx;
                 this.y += this.vy;
 
@@ -280,6 +286,7 @@
             }
 
             reset() {
+                if (!bounds) return;
                 this.x = Math.random() * bounds.w;
                 this.y = Math.random() * bounds.h;
                 this.vx = (Math.random() - 0.5) * 0.5;
@@ -309,7 +316,8 @@
                 const speed = config.speedMultiplier;
                 const heatZoneHeight = bounds.h * 0.25;
 
-                const distanceFromBottom = bounds.h - (this.y + this.radius);
+                // --- CORRECTED: Thermodynamics for full screen ---
+                const distanceFromBottom = bounds.h - this.y;
                 if (distanceFromBottom < heatZoneHeight) {
                     const heatFactor = 1 - (distanceFromBottom / heatZoneHeight);
                     const heatRate = config.baseHeatRate * speed * config.brightness * heatFactor;
@@ -344,7 +352,7 @@
                 this.x += this.vx;
                 this.y += this.vy;
 
-                // --- ROBUST CONTAINMENT FIX ---
+                // --- ROBUST CONTAINMENT ---
                 if (this.x - this.radius < 0) { this.x = this.radius; this.vx *= -0.7; }
                 if (this.x + this.radius > bounds.w) { this.x = bounds.w - this.radius; this.vx *= -0.7; }
                 if (this.y - this.radius < 0) { this.y = this.radius; this.vy *= -0.7; }
@@ -356,9 +364,10 @@
         function renderMetaballs() {
             if (!bounds || canvas.width === 0 || canvas.height === 0) return;
             
+            ctx.save();
             const imageData = ctx.getImageData(0, 0, canvas.width, canvas.height);
             const data = imageData.data;
-            const res = 2; 
+            const res = window.innerWidth < 768 ? 4 : 2; // Performance for mobile
             const threshold = 1.4;
             const smoothingRange = 0.8; 
 
@@ -628,9 +637,9 @@
             }
         }
 
+        window.addEventListener('load', fullResetAndStart);
         window.addEventListener('resize', fullResetAndStart);
-
-        fullResetAndStart();
+        
     </script>
 </body>
 </html>
