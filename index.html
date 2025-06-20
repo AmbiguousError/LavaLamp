@@ -330,6 +330,7 @@
                 const speed = config.speedMultiplier;
                 const heatZoneHeight = bounds.h * 0.25;
 
+                // --- ADJUSTED: Allow full travel to bottom ---
                 const distanceFromBottom = (lamp.h - lamp.baseHeight) - (this.y + this.radius);
                 if (distanceFromBottom < heatZoneHeight) {
                     const heatFactor = 1 - (distanceFromBottom / heatZoneHeight);
@@ -347,11 +348,9 @@
                 const buoyancy = (this.temperature - config.neutralTemp) * config.baseBuoyancyFactor * speed;
                 this.vy += buoyancy;
 
-                // --- NEW: Fluid convection effect on wax ---
                 const lampRadiusHere = lamp.getRadiusAt(this.y);
                 if (lampRadiusHere > 0) {
                     const sidePullRatio = Math.abs(this.x - lamp.cx) / lampRadiusHere;
-                    // Apply a downward force that's stronger at the sides, simulating cooler, sinking liquid
                     const downwardConvection = sidePullRatio * 0.0008 * config.speedMultiplier;
                     this.vy += downwardConvection;
                 }
@@ -377,6 +376,7 @@
                 this.x += this.vx;
                 this.y += this.vy;
 
+                // --- ROBUST CONTAINMENT FIX ---
                 const margin = 5;
                 const lampRadiusAtY_2 = lamp.getRadiusAt(this.y);
                 if (lampRadiusAtY_2 > 0) {
@@ -531,6 +531,7 @@
             ctx.restore();
         }
 
+        // --- NEW: Rewritten Initial Blob Placement ---
         function resetBlobs() {
             blobs = [];
             if (!lamp) return;
@@ -540,8 +541,10 @@
         
             let startY = lamp.h - lamp.baseHeight - singleMassRadius;
             
-            const bottomWidth = lamp.getRadiusAt(lamp.h - lamp.baseHeight -1);
-            singleMassRadius = Math.min(singleMassRadius, bottomWidth - 5);
+            const bottomWidth = lamp.getRadiusAt(lamp.h - lamp.baseHeight - 1);
+            if (bottomWidth > 0) {
+              singleMassRadius = Math.min(singleMassRadius, bottomWidth - 5);
+            }
             
             startY = lamp.h - lamp.baseHeight - singleMassRadius;
             const startX = lamp.cx;
