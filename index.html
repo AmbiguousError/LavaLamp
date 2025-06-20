@@ -11,7 +11,7 @@
             --panel-bg: rgba(40, 40, 40, 0.95);
             --panel-border: rgba(255, 255, 255, 0.1);
             --text-color-bright: #eee;
-            --accent-color: #ff005a;
+            --accent-color: #ff8c00;
         }
 
         body {
@@ -186,27 +186,27 @@
         </div>
         <div class="setting">
             <label for="speed-slider">Speed</label>
-            <input type="range" id="speed-slider" min="50" max="250" value="100">
+            <input type="range" id="speed-slider" min="50" max="250" value="200">
         </div>
         <div class="setting">
             <label for="glitter-slider">Glitter Volume</label>
-            <input type="range" id="glitter-slider" min="0" max="1000" value="0">
+            <input type="range" id="glitter-slider" min="0" max="1000" value="250">
         </div>
         <div class="setting">
             <label for="wax-volume-slider">Initial Wax Volume</label>
-            <input type="range" id="wax-volume-slider" min="2" max="15" value="7">
+            <input type="range" id="wax-volume-slider" min="2" max="15" value="14">
         </div>
         <div class="setting">
             <label for="brightness-slider">Heat</label>
-            <input type="range" id="brightness-slider" min="50" max="150" value="100">
+            <input type="range" id="brightness-slider" min="50" max="150" value="140">
         </div>
         <div class="setting">
             <label for="viscosity-slider">Wax Viscosity</label>
-            <input type="range" id="viscosity-slider" min="950" max="995" value="985">
+            <input type="range" id="viscosity-slider" min="950" max="995" value="961">
         </div>
         <div class="setting">
             <label for="volatility-slider">Volatility</label>
-            <input type="range" id="volatility-slider" min="0" max="100" value="20">
+            <input type="range" id="volatility-slider" min="0" max="100" value="80">
         </div>
     </div>
 
@@ -225,26 +225,27 @@
         ];
 
         let config = {
-            initialNumBlobs: 7,
+            initialNumBlobs: 14,
             minBlobRadius: 55,
             maxBlobRadius: 85,
             baseHeatRate: 0.1,
             baseCoolRate: 0.12,
             baseBuoyancyFactor: -0.00018,
             neutralTemp: 55,
-            viscosity: 0.985,
-            volatility: 0.2,
-            speedMultiplier: 1.0,
-            brightness: 1.0,
-            glitterCount: 0,
-            lavaColor: colorThemes[0].lava,
-            liquidColor: colorThemes[0].liquid,
+            viscosity: 0.961,
+            volatility: 0.8,
+            speedMultiplier: 2.0,
+            brightness: 1.4,
+            glitterCount: 250,
+            lavaColor: colorThemes[3].lava,
+            liquidColor: colorThemes[3].liquid,
         };
 
         let blobs = [];
         let glitterParticles = [];
         let bounds;
         const dpr = window.devicePixelRatio || 1;
+        let offscreenCanvas, offscreenCtx;
 
         // --- Glitter Particle Class ---
         class GlitterParticle {
@@ -265,7 +266,6 @@
                     }
                 }
                 
-                // --- CORRECTED: Convection for full screen ---
                 const distFromCenter = this.x - bounds.w / 2;
                 const convectionStrength = 0.005 * (1 - Math.abs(distFromCenter) / (bounds.w / 2));
                 this.vy -= convectionStrength * config.speedMultiplier;
@@ -316,7 +316,6 @@
                 const speed = config.speedMultiplier;
                 const heatZoneHeight = bounds.h * 0.25;
 
-                // --- CORRECTED: Thermodynamics for full screen ---
                 const distanceFromBottom = bounds.h - this.y;
                 if (distanceFromBottom < heatZoneHeight) {
                     const heatFactor = 1 - (distanceFromBottom / heatZoneHeight);
@@ -352,7 +351,6 @@
                 this.x += this.vx;
                 this.y += this.vy;
 
-                // --- ROBUST CONTAINMENT ---
                 if (this.x - this.radius < 0) { this.x = this.radius; this.vx *= -0.7; }
                 if (this.x + this.radius > bounds.w) { this.x = bounds.w - this.radius; this.vx *= -0.7; }
                 if (this.y - this.radius < 0) { this.y = this.radius; this.vy *= -0.7; }
@@ -360,51 +358,29 @@
             }
         }
         
-        // --- Metaballs Rendering (Restored with performance optimizations) ---
+        // --- NEW: High-performance Metaballs Rendering ---
         function renderMetaballs() {
             if (!bounds || canvas.width === 0 || canvas.height === 0) return;
             
-            ctx.save();
-            const imageData = ctx.getImageData(0, 0, canvas.width, canvas.height);
-            const data = imageData.data;
-            const res = window.innerWidth < 768 ? 4 : 2; // Adaptive resolution for performance
-            const threshold = 1.4;
-            const smoothingRange = 0.8; 
+            offscreenCtx.clearRect(0, 0, offscreenCanvas.width, offscreenCanvas.height);
 
-            for (let x = 0; x < canvas.width; x += res) {
-                for (let y = 0; y < canvas.height; y += res) {
-                    let sum = 0;
-                    for (const blob of blobs) {
-                        const dx = x - blob.x;
-                        const dy = y - blob.y;
-                        const dSq = dx * dx + dy * dy;
-                        if (dSq === 0) continue;
-                        sum += (blob.radius * blob.radius) / dSq;
-                    }
-                    if (sum >= threshold) {
-                         for (let i = 0; i < res; i++) {
-                            for (let j = 0; j < res; j++) {
-                                if (x + i < canvas.width && y + j < canvas.height) {
-                                    const px = ((y + j) * canvas.width + (x + i)) * 4;
-                                    let t = (sum - threshold) / smoothingRange;
-                                    t = Math.max(0, Math.min(1, t)); 
-                                    const alpha = (t * t * (3 - 2 * t)) * 255; 
+            offscreenCtx.save();
+            offscreenCtx.fillStyle = `rgb(${config.lavaColor.r}, ${config.lavaColor.g}, ${config.lavaColor.b})`;
+            
+            const blurAmount = 30;
+            offscreenCtx.filter = `blur(${blurAmount}px) contrast(15)`;
 
-                                    data[px] = config.lavaColor.r;
-                                    data[px + 1] = config.lavaColor.g;
-                                    data[px + 2] = config.lavaColor.b;
-                                    data[px + 3] = alpha;
-                                }
-                            }
-                        }
-                    }
-                }
-            }
-            ctx.putImageData(imageData, 0, 0);
-            ctx.restore();
+            blobs.forEach(blob => {
+                offscreenCtx.beginPath();
+                offscreenCtx.arc(blob.x, blob.y, blob.radius, 0, Math.PI * 2);
+                offscreenCtx.fill();
+            });
+            offscreenCtx.restore();
+            
+            ctx.drawImage(offscreenCanvas, 0, 0);
         }
 
-        // --- Rewritten Initial Blob Placement ---
+        // --- NEW: Rewritten Initial Blob Placement ---
         function resetBlobs() {
             blobs = [];
             if (!bounds) return;
@@ -514,6 +490,11 @@
 
             bounds = { x: 0, y: 0, w: w, h: h };
             
+            offscreenCanvas = document.createElement('canvas');
+            offscreenCanvas.width = canvas.width;
+            offscreenCanvas.height = canvas.height;
+            offscreenCtx = offscreenCanvas.getContext('2d');
+            
             resetBlobs();
 
             glitterParticles = [];
@@ -543,7 +524,7 @@
             glitterParticles.forEach(p => p.update());
 
             ctx.fillStyle = config.liquidColor;
-            ctx.fillRect(0, 0, canvas.width, canvas.height);
+            ctx.fillRect(0, 0, bounds.w, bounds.h);
             glitterParticles.forEach(p => p.draw());
 
             renderMetaballs();
@@ -557,7 +538,7 @@
             colorThemes.forEach((theme) => {
                 const swatch = document.createElement('div');
                 swatch.className = 'swatch';
-                if (theme.liquid === config.liquidColor && theme.lava.r === config.lavaColor.r) {
+                if (theme.name === 'sunset') {
                   swatch.classList.add('active');
                 }
                 
