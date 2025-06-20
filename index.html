@@ -194,7 +194,7 @@
         </div>
         <div class="setting">
             <label for="wax-volume-slider">Initial Wax Volume</label>
-            <input type="range" id="wax-volume-slider" min="2" max="15" value="14">
+            <input type="range" id="wax-volume-slider" min="2" max="30" value="14">
         </div>
         <div class="setting">
             <label for="brightness-slider">Heat</label>
@@ -362,9 +362,21 @@
         function renderMetaballs() {
             if (!bounds || canvas.width === 0 || canvas.height === 0) return;
             
-            offscreenCtx.clearRect(0, 0, offscreenCanvas.width, offscreenCanvas.height);
+            // --- NEW: Seamless Blending ---
+            // Draw the liquid color on the offscreen canvas first
+            offscreenCtx.fillStyle = config.liquidColor;
+            offscreenCtx.fillRect(0, 0, offscreenCanvas.width, offscreenCanvas.height);
+            
+            // Draw the glitter on top of the liquid color
+            glitterParticles.forEach(p => {
+                offscreenCtx.fillStyle = `rgba(255, 255, 255, ${p.opacity})`;
+                offscreenCtx.beginPath();
+                offscreenCtx.arc(p.x, p.y, 1 * dpr, 0, Math.PI * 2);
+                offscreenCtx.fill();
+            });
 
             offscreenCtx.save();
+            
             offscreenCtx.fillStyle = `rgb(${config.lavaColor.r}, ${config.lavaColor.g}, ${config.lavaColor.b})`;
             
             const blurAmount = 30;
@@ -377,6 +389,7 @@
             });
             offscreenCtx.restore();
             
+            // Draw the entire offscreen canvas to the main one
             ctx.drawImage(offscreenCanvas, 0, 0);
         }
 
@@ -433,7 +446,7 @@
                     const dy = blobA.y - blobB.y;
                     const distance = Math.sqrt(dx * dx + dy * dy);
 
-                    if (distance < (blobA.radius + blobB.radius) * 0.5 && blobA.temperature < 40 && blobB.temperature < 40) {
+                    if (distance < (blobA.radius + blobB.radius) * 0.7 && blobA.temperature < 50 && blobB.temperature < 50) {
                         const totalArea = Math.PI * blobA.radius * blobA.radius + Math.PI * blobB.radius * blobB.radius;
                         const newRadius = Math.sqrt(totalArea / Math.PI);
                         const newX = (blobA.x * blobA.radius + blobB.x * blobB.radius) / (blobA.radius + blobB.radius);
@@ -522,10 +535,6 @@
                  handleWaxDynamics();
             }
             glitterParticles.forEach(p => p.update());
-
-            ctx.fillStyle = config.liquidColor;
-            ctx.fillRect(0, 0, bounds.w, bounds.h);
-            glitterParticles.forEach(p => p.draw());
 
             renderMetaballs();
             
